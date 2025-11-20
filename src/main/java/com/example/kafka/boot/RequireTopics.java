@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;   // <-- ADD THIS
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,7 +37,6 @@ public class RequireTopics {
   @Bean
   @Qualifier("inputAdminClient")
   public AdminClient inputAdminClient(KafkaProperties props) {
-    // Uses consumer-side bootstrap-servers + security (Option A)
     Map<String, Object> cfg = new HashMap<>(props.buildConsumerProperties(null));
     return AdminClient.create(cfg);
   }
@@ -45,7 +45,6 @@ public class RequireTopics {
   @Bean
   @Qualifier("outputAdminClient")
   public AdminClient outputAdminClient(KafkaProperties props) {
-    // Uses producer-side bootstrap-servers + security (Option A)
     Map<String, Object> cfg = new HashMap<>(props.buildProducerProperties(null));
     return AdminClient.create(cfg);
   }
@@ -56,8 +55,16 @@ public class RequireTopics {
    *  2) Verify input topic on INPUT cluster
    *  3) Verify sink topics (only kafka-type) on OUTPUT cluster
    *  4) Start listener containers
+   *
+   * Only active when app.input.source = kafka (or missing).
+   * When app.input.source = rest-api, this bean is NOT created.
    */
   @Bean
+  @ConditionalOnProperty(
+      name = "app.input.source",
+      havingValue = "kafka",
+      matchIfMissing = true
+  )
   public ApplicationRunner verifyAllTopics(
       @Qualifier("inputAdminClient")  AdminClient inputAdmin,
       @Qualifier("outputAdminClient") AdminClient outputAdmin,

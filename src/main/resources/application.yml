@@ -1,145 +1,88 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# App (custom) properties used by your beans
-# ─────────────────────────────────────────────────────────────────────────────
 app:
-  kafka:
-    # Kafka topic to CONSUME from
-    input-topic: snmp-traps
-  # Kafka topic to PRODUCE the transformed message to
+  input:
+    source: rest-api
+#  kafka:
+#    input-topic: snmp-traps      # ← REQUIRED for RequireTopics
+
   sinks:
     output:
       type: file
       file: C:\Users\akorakas\Desktop\output\output.ndjson
-      #topic: snmp-traps-pipeline
-    # Dead-letter topic for "transform/pipeline" failures (valid JSON but bad content)
     dlt:
       type: kafka
       topic: snmp-traps.dlt
-    # Errors topic for "bad input" (invalid JSON)
     error:
       type: kafka
       topic: snmp-traps.errors
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Spring Boot Actuator & Micrometer (Prometheus) 
-# Exposes health, metrics and /actuator/prometheus endpoints
-# ─────────────────────────────────────────────────────────────────────────────
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,metrics,prometheus,env,info     # expose these endpoints over HTTP
-      base-path: /actuator                     # GET /actuator/health, /actuator/metrics, /actuator/prometheus
-  endpoint:
-    health:
-      show-details: when_authorized            # use 'always' during dev; 'when_authorized' for prod
-  health:
-    kafka:
-      enabled: true                            # include Kafka health in /actuator/health
-  metrics:
-    tags:                                      # default labels added to every metric
-      app: kafka-application
-      instance: ${HOSTNAME}                    # helpful when running multiple pods/containers
+  rest:
+    nsp:
+      scheme: https
+      host: 172.17.52.133
 
-  # Optional: serve actuator on a separate port (uncomment to use)
-  # server:
-  #   port: 9090
+      poll-interval-ms: 60000
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Spring for Apache Kafka (consumer/producer/listener)
-# ─────────────────────────────────────────────────────────────────────────────
+      auth:
+        basic: "bnNwcHJveHl1aTpLQGZrYVByb3ghYXRuMDFfbGFiOQ=="
+        grant-type: "client_credentials"
+
+      headers:
+        content-type: "application/json"
+        accept: "application/json"
+
+      paths:
+        token: "/rest-gateway/rest/api/v1/auth/token"
+        alarms: "/FaultManagement/rest/api/v2/alarms/details"
+
 spring:
   kafka:
-    # Comma-separated list of bootstrap brokers
-#    bootstrap-servers: 10.200.14.65:9092
-#    properties:
-#      "[security.protocol]": PLAINTEXT
-#      "[allow.auto.create.topics]": false
+    bootstrap-servers: 10.200.14.65:9092    # ← for AdminClient & default
 
-    # --------------------------- Consumer ------------------------------------
     consumer:
       bootstrap-servers: 10.200.14.65:9092
-      group-id: test09                         # consumer group id
-      auto-offset-reset: earliest              # 'latest' in prod if you don’t want old data
-      enable-auto-commit: false                # we control commits via the error handler
+      group-id: test09
+      auto-offset-reset: earliest
+      enable-auto-commit: false
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-
       properties:
-        "[client.id]": kafka-app-consumer      # useful for broker-side metrics/logs
-
-        # Jackson (only used if you switch to JsonDeserializer; kept for reference)
+        "[client.id]": kafka-app-consumer
         "[spring.json.trusted.packages]": "com.example.kafka.model"
         "[spring.json.value.default.type]": "com.example.kafka.model.InputEvent"
         "[spring.json.use.type.headers]": false
-        "[allow.auto.create.topics]": false   # don't trigger broker auto-create
-
-        # Throughput/latency knobs (tune to your load & message sizes)
-        "[max.poll.records]": 10000            # number of records per poll
-        "[max.poll.interval.ms]": 600000       # long processing allowance
+        "[allow.auto.create.topics]": false
+        "[max.poll.records]": 10000
+        "[max.poll.interval.ms]": 600000
         "[default.api.timeout.ms]": 60000
         "[request.timeout.ms]": 30000
-        "[fetch.min.bytes]": 1048576           # 1 MiB; raise for larger batches
+        "[fetch.min.bytes]": 1048576
         "[fetch.max.wait.ms]": 50
         "[partition.assignment.strategy]": org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+        "[security.protocol]": PLAINTEXT   # or your SASL_SSL config if you changed it
 
-        # Security protocol
-        "[security.protocol]": PLAINTEXT       # change to SASL_SSL for secure clusters
-
-      # --- Examples for secure clusters (uncomment & fill) ---
-      # properties:
-      #   "[security.protocol]": SASL_SSL
-      #   "[sasl.mechanism]": SCRAM-SHA-512     # or PLAIN
-      #   "[sasl.jaas.config]": >-
-      #     org.apache.kafka.common.security.scram.ScramLoginModule required
-      #     username="YOUR_USER" password="YOUR_PASS";
-      #   "[ssl.truststore.type]": JKS
-      #   "[ssl.truststore.location]": "/path/to/truststore.jks"
-      #   "[ssl.truststore.password]": "${TRUSTSTORE_PASSWORD}"
-      #   "[ssl.endpoint.identification.algorithm]": "https"  # '' only for dev/self-signed
-
-    # --------------------------- Producer ------------------------------------
     producer:
       bootstrap-servers: 10.200.14.65:9092
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      acks: all                               # strongest durability (leader+replicas)
+      acks: all
       properties:
         "[client.id]": kafka-app-producer
-        "[security.protocol]": PLAINTEXT      # match your cluster security
-
-        # Delivery behavior
-        "[enable.idempotence]": true          # safe, avoids duplicates on retries
+        "[security.protocol]": PLAINTEXT   # again, adjust if you use SASL_SSL
+        "[enable.idempotence]": true
         "[max.in.flight.requests.per.connection]": 5
-        "[retries]": 2147483647               # Kafka client handles backoff
-        "[linger.ms]": 5                      # small batching window
-        "[batch.size]": 65536                 # 64 KiB batch size
-        "[compression.type]": lz4             # good compression/speed tradeoff
+        "[retries]": 2147483647
+        "[linger.ms]": 5
+        "[batch.size]": 65536
+        "[compression.type]": lz4
         "[request.timeout.ms]": 5000
-        "[max.block.ms]": 5000                # producer send() max block
-        "[allow.auto.create.topics]": false   # same for producers
-        
+        "[max.block.ms]": 5000
+        "[allow.auto.create.topics]": false
 
-      # --- Secure producer example (uncomment & mirror consumer settings) ---
-      # properties:
-      #   "[security.protocol]": SASL_SSL
-      #   "[sasl.mechanism]": SCRAM-SHA-512
-      #   "[sasl.jaas.config]": >-
-      #     org.apache.kafka.common.security.scram.ScramLoginModule required
-      #     username="YOUR_USER" password="YOUR_PASS";
-      #   "[ssl.truststore.type]": JKS
-      #   "[ssl.truststore.location]": "/path/to/truststore.jks"
-      #   "[ssl.truststore.password]": "${TRUSTSTORE_PASSWORD}"
-
-    # --------------------------- Listener container --------------------------
     listener:
-      # Number of consumer threads (per @KafkaListener). 
-      # Do not exceed the partition count of the input topic.
       concurrency: 1
-      # How container acks records; BATCH is a solid default with manual commits via handler
       ack-mode: BATCH
-      auto-startup: false
-      missing-topics-fatal: true   # fail container startup if a topic is missing
+      auto-startup: false        # for your REST-driven app this is fine
+      missing-topics-fatal: true
 
     admin:
       fail-fast: true
@@ -148,29 +91,11 @@ spring:
         "[request.timeout.ms]": 10000
         "[default.api.timeout.ms]": 10000
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Logging levels (raise to DEBUG while troubleshooting networking)
-# ─────────────────────────────────────────────────────────────────────────────
-logging:
-  level:
-    "[org.apache.kafka.clients.NetworkClient]": INFO
-    "[org.apache.kafka.common.network]": INFO
-    "[org.springframework.kafka]": INFO
-    # com.example.kafka: DEBUG     # your app package (enable for local debugging)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Pluggable transformation pipeline (NiFi-like steps)
-# The Transformer builds steps from here and runs them per message.
-# ─────────────────────────────────────────────────────────────────────────────
 transform:
-  # Special placeholder your pipeline uses to detect “not recovered yet”
   placeholder: "{EVENT.RECOVERY.DATE} {EVENT.RECOVERY.TIME}"
-
-  # If true, a startup validator checks template steps render valid JSON (structure) and fails fast.
   validate-on-start: true
 
   pipeline:
-    # 1) Extract: map JSON paths → variables (fails if any path missing or fromVar invalid JSON)
     - type: extract
       failOnMissing: true
       failOnBadJson: true
@@ -186,14 +111,13 @@ transform:
         timestamp: "/timestamp"
         eventTimeRaw: "/fields/event_time"
 
-    # 2) Update: normalize & derive fields (mini-expressions evaluated against context vars)
     - type: update
-      stripCr:                      # remove \r and trim
+      stripCr:
         - eventNameRaw
         - serialNoRaw
         - eventTimeRaw
         - resolvedRaw
-      compute:                      # set = variable to set, expr = expression using vars
+      compute:
         - set: eventName
           expr: "eventNameRaw"
         - set: serialNo
@@ -203,48 +127,39 @@ transform:
         - set: Status
           expr: "resolvedAt == '' ? 'Open' : 'Closed'"
 
-    # Optional: pull extra fields now that basics exist
     - type: extract
       mappings:
         Community: "/tags/community"
 
-    # 3) Regex extract: createdAt from eventMessage; fallback to eventTimeRaw if no match
     - type: regexExtract
       source: eventMessage
       pattern: "Created at: (.*?)\\r\\nResolved at:"
       group: 1
       target: createdAt
-      fallback: eventTimeRaw            # remove this to treat "no match" as transform failure
+      fallback: eventTimeRaw
 
-    # 4) Flatten: copy fields.* and tags.* into a single JSON object string in 'sourceEvent'
     - type: flatten
-      roots: [ "fields", "tags" ]       # trees to flatten
-      includeTop: [ "name", "timestamp" ] # also include these top-level fields
-      target: sourceEvent               # stored as a JSON string variable
+      roots: [ "fields", "tags" ]
+      includeTop: [ "name", "timestamp" ]
+      target: sourceEvent
 
-    # 5) Hash: produce a correlation id using selected vars
     - type: hash
       algorithm: MD5
       fields: [ "host", "eventName", "serialNo", "timestamp" ]
       target: correlation_id
 
-    # 6) More extracts (simple paths)
     - type: extract
       mappings:
         uptime: "/fields/sysUpTimeInstance"
         srcVersion: "/tags/version"
         oid: "/tags/oid"
 
-    # 7) Extract from the flattened JSON (value is in sourceEvent var as JSON string)
     - type: extract
       fromVar: sourceEvent
       failOnBadJson: true
       mappings:
         mib: "/tags.mib"
 
-    # 8) Template: assemble final JSON. 
-    #    ${var} placeholders come from vars produced above. 
-    #    target: "$" means “this string is the final message body”.
     - type: template
       target: "$"
       template: |
@@ -267,10 +182,3 @@ transform:
           "sourceEvent": ${sourceEvent},
           "Community": ["${Community}"]
         }
-
-    # Example (optional): hard fail if certain JSON pointers are missing in the INPUT document
-    # - type: requireFields
-    #   required:
-    #     - "/fields/event_id"
-    #     - "/fields/host_name"
-    #     - "/tags/mib"
