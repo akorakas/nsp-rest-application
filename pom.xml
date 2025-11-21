@@ -13,7 +13,7 @@
 
   <groupId>com.example</groupId>
   <artifactId>nsp-rest-application</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>0.3.0-SNAPSHOT</version>
   <name>knsp-rest-application</name>
   <description>NSP REST → transform → sinks</description>
 
