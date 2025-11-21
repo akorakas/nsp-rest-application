@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.example.kafka.service.Transformer;
@@ -32,7 +31,7 @@ public class NspRestPoller {
         log.info("NSP config from YAML (via @Value): host={}", host);
     }
 
-    @Scheduled(fixedDelayString = "${app.rest.nsp.poll-interval-ms:60000}")
+    // @Scheduled(fixedDelayString = "${app.rest.nsp.poll-interval-ms:60000}")
     public void pollActiveAlarms() {
         try {
             List<String> events = nspClient.fetchActiveAlarmEvents();
