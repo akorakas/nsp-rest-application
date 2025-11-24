@@ -8,6 +8,7 @@ public class NspRestProperties {
     private String scheme = "https";
     private String host;
     private long pollIntervalMs = 60000;
+    private String alarmsArrayPath = "/response/data";
 
     private Auth auth = new Auth();
     private Headers headers = new Headers();
@@ -48,6 +49,14 @@ public class NspRestProperties {
         public void setAlarms(String alarms) { this.alarms = alarms; }
     }
 
+    public String getAlarmsArrayPath() {
+        return alarmsArrayPath;
+    }
+
+    public void setAlarmsArrayPath(String alarmsArrayPath) {
+        this.alarmsArrayPath = alarmsArrayPath;
+    }
+    
     // ----- getters/setters -----
     public String getScheme() { return scheme; }
     public void setScheme(String scheme) { this.scheme = scheme; }

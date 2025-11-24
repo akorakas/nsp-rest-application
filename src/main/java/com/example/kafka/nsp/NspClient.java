@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import com.fasterxml.jackson.core.JsonPointer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -52,6 +53,10 @@ public class NspClient {
 
     @Value("${app.rest.nsp.headers.accept:application/json}")
     private String accept;
+
+    // ΝΕΟ: σε ποιο JSON path είναι το array με τα alarms
+    @Value("${app.rest.nsp.alarms-array-path:/response/data}")
+    private String alarmsArrayPath;
 
     // ───────────────────────────────────────
 
@@ -125,15 +130,30 @@ public class NspClient {
         JsonNode root = objectMapper.readTree(raw);
         List<String> result = new ArrayList<>();
 
-        if (root.isArray()) {
+        // Χρησιμοποιούμε το alarmsArrayPath (π.χ. "/response/data")
+        JsonNode arrayNode;
+        try {
+            JsonPointer ptr = JsonPointer.compile(alarmsArrayPath);
+            arrayNode = root.at(ptr);
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid JSON pointer for alarms-array-path: {}", alarmsArrayPath, e);
+            arrayNode = root;
+        }
+
+        if (arrayNode != null && arrayNode.isArray()) {
+            for (JsonNode node : arrayNode) {
+                result.add(objectMapper.writeValueAsString(node));
+            }
+            log.info("NSP: split {} alarm(s) from {}", result.size(), alarmsArrayPath);
+        } else if (root.isArray()) {
+            // fallback: όλο το root είναι array
             for (JsonNode node : root) {
                 result.add(objectMapper.writeValueAsString(node));
             }
-        } else if (root.has("alarms") && root.get("alarms").isArray()) {
-            for (JsonNode node : root.get("alarms")) {
-                result.add(objectMapper.writeValueAsString(node));
-            }
+            log.warn("NSP: alarms-array-path {} did not resolve to array, used root array instead", alarmsArrayPath);
         } else {
+            // τελικό fallback: επέστρεψε το raw ως ένα μόνο message
+            log.warn("NSP: alarms-array-path {} did not resolve to array; returning single raw payload", alarmsArrayPath);
             result.add(raw);
         }
 
