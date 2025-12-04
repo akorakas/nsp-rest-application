@@ -20,6 +20,10 @@ import com.example.kafka.service.pipeline.TransformStep;
  * και απλό:
  *   expr: "someVar"
  * => παίρνει ctx.get("someVar")
+ *
+ * Επιπλέον υποστηρίζει:
+ *   expr: "UPPER(severity)"
+ *   expr: "UPPER(someVar)"
  */
 public class UpdateStep implements TransformStep {
 
@@ -72,6 +76,10 @@ public class UpdateStep implements TransformStep {
    * Υποστηρίζει nested ternaries (με recursion):
    *   expr: "fdn != null ? 'FAULT_SYNC' :
    *          (objectId != null ? 'FAULT' : 'UNKNOWN')"
+   *
+   * Επιπλέον υποστηρίζει:
+   *   expr: "UPPER(severity)"
+   *   expr: "UPPER(someVar)"
    */
   private static String evalMiniExpr(String expr, TransformContext ctx, String placeholder) {
     if (expr == null) return null;
@@ -85,6 +93,12 @@ public class UpdateStep implements TransformStep {
 
     // Αφαίρεση εξωτερικών παρενθέσεων αν είναι περιττές
     e = stripOuterParens(e);
+
+    // --- NEW: UPPER(...) function support at top level ---
+    if (isUpperCall(e)) {
+      return evalUpperCall(e, ctx);
+    }
+    // --- END NEW ---
 
     // Αν δεν υπάρχει '?', είναι απλό var ή literal
     if (!e.contains("?")) {
@@ -114,12 +128,17 @@ public class UpdateStep implements TransformStep {
       return unquote(chosen);
     }
 
-    // 2) Αν περιέχει πάλι '?', είναι nested ternary → recursion
+    // 2) NEW: υποστήριξη UPPER(...) μέσα στα arms του ternary
+    if (isUpperCall(chosen)) {
+      return evalUpperCall(chosen, ctx);
+    }
+
+    // 3) Αν περιέχει πάλι '?', είναι nested ternary → recursion
     if (chosen.contains("?")) {
       return evalMiniExpr(chosen, ctx, placeholder);
     }
 
-    // 3) Αλλιώς προσπάθησε να το διαβάσεις ως var από το context
+    // 4) Αλλιώς προσπάθησε να το διαβάσεις ως var από το context
     Object v = ctx.get(chosen);
     return (v == null) ? null : v.toString();
   }
@@ -193,5 +212,31 @@ public class UpdateStep implements TransformStep {
       return s.substring(1, s.length() - 1);
     }
     return s;
+  }
+
+  // ─────────────────────────────────────────────
+  // NEW: helpers για UPPER(...)
+  // ─────────────────────────────────────────────
+
+  private static boolean isUpperCall(String expr) {
+    if (expr == null) return false;
+    String e = expr.trim();
+    // case-insensitive check για "UPPER(...)" μορφή
+    return e.toUpperCase().startsWith("UPPER(") && e.endsWith(")");
+  }
+
+  private static String evalUpperCall(String expr, TransformContext ctx) {
+    String e = expr.trim();
+    // strip "UPPER(" + ")"
+    String inner = e.substring(e.indexOf('(') + 1, e.length() - 1).trim();
+
+    // Αν είναι literal "κάτι" → κάνε uppercase αυτό
+    if (isQuoted(inner)) {
+      return unquote(inner).toUpperCase();
+    }
+
+    // Αλλιώς θεωρείται όνομα μεταβλητής
+    Object v = ctx.get(inner);
+    return (v == null) ? null : v.toString().toUpperCase();
   }
 }
