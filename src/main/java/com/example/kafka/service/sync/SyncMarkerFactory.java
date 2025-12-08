@@ -4,9 +4,11 @@ import org.springframework.stereotype.Component;
 
 import com.example.kafka.service.pipeline.TransformContext;
 import com.example.kafka.service.pipeline.steps.TemplateStep;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * SyncMarkerFactory
@@ -21,56 +23,86 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  *  - timestamp = System.currentTimeMillis()
  *  - sourceEvent = {} (κενό JSON object)
  *
- * Έτσι αν αλλάξεις το template στο YAML, αλλάζει αυτόματα
- * και η μορφή των SYNC_START / SYNC_END.
+ * ΣΗΜΑΝΤΙΚΟ:
+ *  Παίρνουμε το τελικό JSON από ctx.rendered,
+ *  γιατί εκεί γράφει το TemplateStep.
  */
+@Slf4j
 @Component
+@RequiredArgsConstructor
 public class SyncMarkerFactory {
 
   private final TemplateStep templateStep;
   private final ObjectMapper mapper = new ObjectMapper();
 
-  public SyncMarkerFactory(TemplateStep templateStep) {
-    this.templateStep = templateStep;
-  }
-
-  /** Δημιουργεί ένα SYNC_START μήνυμα (ως String JSON). */
-  public String buildSyncStart() throws Exception {
+  /**
+   * Δημιουργεί ένα SYNC_START μήνυμα (ως String JSON).
+   */
+  public String buildSyncStart() {
     return buildWithType("SYNC_START");
   }
 
-  /** Δημιουργεί ένα SYNC_END μήνυμα (ως String JSON). */
-  public String buildSyncEnd() throws Exception {
+  /**
+   * Δημιουργεί ένα SYNC_END μήνυμα (ως String JSON).
+   */
+  public String buildSyncEnd() {
     return buildWithType("SYNC_END");
   }
 
-  /** Κοινή μέθοδος που χτίζει marker για οποιοδήποτε type. */
-  private String buildWithType(String type) throws Exception {
-    // Άδειο root JsonNode
-    ObjectNode emptyRoot = mapper.createObjectNode();
-    TransformContext ctx = new TransformContext(emptyRoot);
+  /**
+   * Κοινή μέθοδος που χτίζει marker για οποιοδήποτε type.
+   * Π.χ. "SYNC_START", "SYNC_END".
+   */
+  private String buildWithType(String type) {
+    try {
+      // Άδειο root JsonNode – δεν θα το χρησιμοποιήσουμε απευθείας,
+      // αλλά χρειάζεται για τον TransformContext.
+      ObjectNode emptyRoot = mapper.createObjectNode();
 
-    // Όλα κενά / null, εκτός από type + timestamp
-    ctx.put("emsDomain", "");
-    ctx.put("faultId", "");
-    ctx.put("neName", "");
-    ctx.put("neId", "");
-    ctx.put("affectedObjectName", "");
-    ctx.put("severity", "");
-    ctx.put("type", type);
+      TransformContext ctx = new TransformContext(emptyRoot);
 
-    // Unix timestamp now (ms)
-    ctx.put("timestamp", System.currentTimeMillis());
+      // Όλα κενά / null, εκτός από type + timestamp
+      ctx.put("emsDomain", "");
+      ctx.put("faultId", "");
+      ctx.put("neName", "");
+      ctx.put("neId", "");
+      ctx.put("affectedObjectName", "");
+      ctx.put("severity", "");
+      ctx.put("type", type);
 
-    // Κενό sourceEvent = {}
-    ObjectNode emptySourceEvent = mapper.createObjectNode();
-    ctx.put("sourceEvent", emptySourceEvent);
+      // Unix timestamp now (ms)
+      ctx.put("timestamp", System.currentTimeMillis());
 
-    // Τρέχουμε το ίδιο TemplateStep με το pipeline
-    templateStep.apply(ctx);
+      // Κενό sourceEvent = {}
+      ObjectNode emptySourceEvent = mapper.createObjectNode();
+      ctx.put("sourceEvent", emptySourceEvent);
 
-    JsonNode out = ctx.root;   // ή ctx.getRoot() αν έχεις getter
+      // Τρέχουμε το ΙΔΙΟ TemplateStep που χρησιμοποιεί και το pipeline
+      templateStep.apply(ctx);
 
-    return mapper.writeValueAsString(out);
+      // ΣΗΜΑΝΤΙΚΟ:
+      // Το TemplateStep γράφει το τελικό JSON στο ctx.rendered (String),
+      // ΟΧΙ στο ctx.root. Άρα:
+      if (ctx.rendered != null && !ctx.rendered.isBlank()) {
+        return ctx.rendered;
+      }
+
+      // Fallback ασφαλείας (δεν θα έπρεπε να συμβαίνει)
+      log.warn("SyncMarkerFactory: ctx.rendered was null/blank for type={}", type);
+      ObjectNode fallback = mapper.createObjectNode();
+      fallback.put("emsDomain", "");
+      fallback.put("faultId", "");
+      fallback.put("neName", "");
+      fallback.put("neEquipment", " | ");
+      fallback.put("type", type);
+      fallback.put("neId", "");
+      fallback.put("severity", "");
+      fallback.put("timestamp", System.currentTimeMillis());
+      fallback.set("sourceEvent", mapper.createObjectNode());
+      return mapper.writeValueAsString(fallback);
+
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to build sync marker '" + type + "'", e);
+    }
   }
 }
