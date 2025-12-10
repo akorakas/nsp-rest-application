@@ -27,6 +27,7 @@ public class TemplateStepConfig {
           "neEquipment": "${neId} | ${affectedObjectName}",
           "type": "${type}",
           "neId": "${neId}",
+          "serialNo": "${serialNo}",
           "severity": "${severity}",
           "timestamp": ${timestamp},
           "sourceEvent": ${sourceEvent}

@@ -96,6 +96,7 @@ public class SyncMarkerFactory {
       fallback.put("neEquipment", " | ");
       fallback.put("type", type);
       fallback.put("neId", "");
+      fallback.put("serialNo", "");
       fallback.put("severity", "");
       fallback.put("timestamp", System.currentTimeMillis());
       fallback.set("sourceEvent", mapper.createObjectNode());
