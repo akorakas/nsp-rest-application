@@ -21,16 +21,30 @@ public class TemplateStepConfig {
   public TemplateStep templateStep() {
     String template = """
         {
-          "emsDomain": "${emsDomain}",
+          "sourceEms": "NSP_ATNOI",
+          "emsVendorID": "NSP",
+          "emsDomain": "${emsDomainNormalized}",
+          "serialNo": "${serialNo}",
           "faultId": "${faultId}",
           "neName": "${neName}",
           "neEquipment": "${neId} | ${affectedObjectName}",
           "type": "${type}",
-          "neId": "${neId}",
-          "serialNo": "${serialNo}",
           "severity": "${severity}",
           "timestamp": ${timestamp},
-          "sourceEvent": ${sourceEvent}
+          "sourceEvent": ${sourceEvent},
+          "metadata": {
+            "neId": "${neId}",
+            "fdn": "${fdn}",
+            "objectId": "${objectId}",
+            "emsDomainRaw": "${emsDomain}",
+            "probableCause": "${probableCause}",
+            "alarmType": "${alarmType}",
+            "impact": ${impact},
+            "serviceAffecting": ${serviceAffecting},
+            "objectFullName": "${objectFullName}"
+          },
+          "enrichedData": null,
+          "alarmIdentifier": "${alarmIdentifier}"
         }
         """;
 

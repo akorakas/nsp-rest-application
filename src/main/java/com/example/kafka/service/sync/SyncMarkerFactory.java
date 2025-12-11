@@ -19,13 +19,11 @@ import lombok.extern.slf4j.Slf4j;
  *  - type = "SYNC_START"
  *  - type = "SYNC_END"
  *
- * Τα υπόλοιπα πεδία είναι κενά (""), εκτός από:
+ * Τα υπόλοιπα πεδία είναι κενά ("" ή null) εκτός από:
  *  - timestamp = System.currentTimeMillis()
  *  - sourceEvent = {} (κενό JSON object)
  *
- * ΣΗΜΑΝΤΙΚΟ:
- *  Παίρνουμε το τελικό JSON από ctx.rendered,
- *  γιατί εκεί γράφει το TemplateStep.
+ * Το TemplateStep γράφει το τελικό JSON στο ctx.rendered.
  */
 @Slf4j
 @Component
@@ -35,40 +33,36 @@ public class SyncMarkerFactory {
   private final TemplateStep templateStep;
   private final ObjectMapper mapper = new ObjectMapper();
 
-  /**
-   * Δημιουργεί ένα SYNC_START μήνυμα (ως String JSON).
-   */
   public String buildSyncStart() {
     return buildWithType("SYNC_START");
   }
 
-  /**
-   * Δημιουργεί ένα SYNC_END μήνυμα (ως String JSON).
-   */
   public String buildSyncEnd() {
     return buildWithType("SYNC_END");
   }
 
-  /**
-   * Κοινή μέθοδος που χτίζει marker για οποιοδήποτε type.
-   * Π.χ. "SYNC_START", "SYNC_END".
-   */
   private String buildWithType(String type) {
     try {
-      // Άδειο root JsonNode – δεν θα το χρησιμοποιήσουμε απευθείας,
-      // αλλά χρειάζεται για τον TransformContext.
       ObjectNode emptyRoot = mapper.createObjectNode();
-
       TransformContext ctx = new TransformContext(emptyRoot);
 
-      // Όλα κενά / null, εκτός από type + timestamp
-      ctx.put("emsDomain", "");
+      // ---- Πεδία UnifiedEvent ----
+
+      // Από το template: "sourceEms": "NSP_ATNOI", "emsVendorID": "NSP"
+      // Αυτά είναι hard-coded στο template, άρα δεν χρειάζεται να τα βάλουμε εδώ.
+
+      // emsDomainNormalized που χρησιμοποιείται στο template
+      ctx.put("emsDomainNormalized", "UNKNOWN");
+
+      // Βασικά πεδία – όλα κενά για SYNC markers
+      ctx.put("serialNo", "");
       ctx.put("faultId", "");
       ctx.put("neName", "");
       ctx.put("neId", "");
       ctx.put("affectedObjectName", "");
-      ctx.put("severity", "");
-      ctx.put("type", type);
+
+      ctx.put("type", type);          // SYNC_START ή SYNC_END
+      ctx.put("severity", ""); // ή "" αν προτιμάς
 
       // Unix timestamp now (ms)
       ctx.put("timestamp", System.currentTimeMillis());
@@ -77,29 +71,44 @@ public class SyncMarkerFactory {
       ObjectNode emptySourceEvent = mapper.createObjectNode();
       ctx.put("sourceEvent", emptySourceEvent);
 
-      // Τρέχουμε το ΙΔΙΟ TemplateStep που χρησιμοποιεί και το pipeline
+      // ---- metadata fields που χρησιμοποιούνται στο template ----
+      ctx.put("fdn", "");
+      ctx.put("objectId", "");
+      ctx.put("emsDomain", "");
+      ctx.put("probableCause", "");
+      ctx.put("alarmType", "");
+      ctx.put("impact", 0);
+      ctx.put("serviceAffecting", (Object) null);
+      ctx.put("objectFullName", "");
+
+      // alarmIdentifier για SYNC markers – βάζω το type για να ξεχωρίζει
+      ctx.put("alarmIdentifier", type);
+
+      // Τρέχουμε το ίδιο TemplateStep με το pipeline
       templateStep.apply(ctx);
 
-      // ΣΗΜΑΝΤΙΚΟ:
-      // Το TemplateStep γράφει το τελικό JSON στο ctx.rendered (String),
-      // ΟΧΙ στο ctx.root. Άρα:
       if (ctx.rendered != null && !ctx.rendered.isBlank()) {
         return ctx.rendered;
       }
 
-      // Fallback ασφαλείας (δεν θα έπρεπε να συμβαίνει)
+      // Fallback ασφαλείας
       log.warn("SyncMarkerFactory: ctx.rendered was null/blank for type={}", type);
       ObjectNode fallback = mapper.createObjectNode();
-      fallback.put("emsDomain", "");
+      fallback.put("sourceEms", "NSP_ATNOI");
+      fallback.put("emsVendorID", "NSP");
+      fallback.put("emsDomain", "UNKNOWN");
+      fallback.put("serialNo", "");
       fallback.put("faultId", "");
       fallback.put("neName", "");
       fallback.put("neEquipment", " | ");
       fallback.put("type", type);
-      fallback.put("neId", "");
-      fallback.put("serialNo", "");
       fallback.put("severity", "");
       fallback.put("timestamp", System.currentTimeMillis());
       fallback.set("sourceEvent", mapper.createObjectNode());
+      fallback.set("metadata", mapper.createObjectNode());
+      fallback.putNull("enrichedData");
+      fallback.put("alarmIdentifier", type);
+
       return mapper.writeValueAsString(fallback);
 
     } catch (Exception e) {
