@@ -1,5 +1,7 @@
 package com.example.kafka.nsp;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,6 +60,10 @@ public class NspClient {
     @Value("${app.rest.nsp.alarms-array-path:/response/data}")
     private String alarmsArrayPath;
 
+    // NEW: raw filter string from YAML
+    @Value("${app.rest.nsp.alarm-filter}")
+    private String alarmFilter;
+
     // ───────────────────────────────────────
 
     private String cachedToken;
@@ -107,7 +113,19 @@ public class NspClient {
     public String fetchActiveAlarmsRaw() throws Exception {
         String token = getAccessToken();
 
-        String url = baseUrl() + alarmsPath;
+        // 1) Raw filter from YAML, e.g. "affectedObjectType like '%Equipment%'"
+        String rawFilter = alarmFilter;
+
+        // 2) Encode ONCE, then encode AGAIN (to match your working curl)
+        String onceEncoded  = URLEncoder.encode(rawFilter, StandardCharsets.UTF_8);
+        String twiceEncoded = URLEncoder.encode(onceEncoded, StandardCharsets.UTF_8);
+
+        // 3) Build final URL EXACTLY as curl:
+        //    /FaultManagement/rest/api/v2/alarms/details/?alarmFilter=affectedObjectType%2520like...
+        String url = baseUrl() + alarmsPath + "?alarmFilter=" + twiceEncoded;
+
+        log.info("NSP alarms raw filter  : {}", rawFilter);
+        log.info("NSP alarms request URL : {}", url);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(token);
