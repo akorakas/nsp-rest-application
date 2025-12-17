@@ -39,8 +39,8 @@ public class TemplateStepConfig {
             "emsDomainRaw": "${emsDomain}",
             "probableCause": "${probableCause}",
             "alarmType": "${alarmType}",
-            "impact": ${impact},
-            "serviceAffecting": ${serviceAffecting},
+            "impact": ${impactSafe},
+            "serviceAffecting": ${serviceAffectingSafe},
             "objectFullName": "${objectFullName}"
           },
           "enrichedData": null,
