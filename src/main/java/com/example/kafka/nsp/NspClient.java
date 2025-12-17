@@ -111,37 +111,47 @@ public class NspClient {
     }
 
     public String fetchActiveAlarmsRaw() throws Exception {
-        String token = getAccessToken();
+    String token = getAccessToken();
 
-        // 1) Raw filter from YAML, e.g. "affectedObjectType like '%Equipment%'"
-        String rawFilter = alarmFilter;
+    // 1) Raw filter from YAML, e.g. "affectedObjectType like '%Equipment%'"
+    String rawFilter = alarmFilter;
 
-        // 2) Encode ONCE, then encode AGAIN (to match your working curl)
-        String onceEncoded  = URLEncoder.encode(rawFilter, StandardCharsets.UTF_8);
-        String twiceEncoded = URLEncoder.encode(onceEncoded, StandardCharsets.UTF_8);
+    // 2) First encode with URLEncoder (spaces -> '+', etc.)
+    String onceEncoded = URLEncoder.encode(rawFilter, StandardCharsets.UTF_8);
+    // onceEncoded: "affectedObjectType+like+%27%25Equipment%25%27"
 
-        // 3) Build final URL EXACTLY as curl:
-        //    /FaultManagement/rest/api/v2/alarms/details/?alarmFilter=affectedObjectType%2520like...
-        String url = baseUrl() + alarmsPath + "?alarmFilter=" + twiceEncoded;
+    // 3) Replace '+' with '%20' so that spaces are encoded as %20, not '+'
+    String onceWithSpacesAsPercent20 = onceEncoded.replace("+", "%20");
+    // onceWithSpacesAsPercent20: "affectedObjectType%20like%20%27%25Equipment%25%27"
 
-        log.info("NSP alarms raw filter  : {}", rawFilter);
-        log.info("NSP alarms request URL : {}", url);
+    // 4) Encode AGAIN to match the working curl (double-encoded)
+    String twiceEncoded = URLEncoder.encode(onceWithSpacesAsPercent20, StandardCharsets.UTF_8);
+    // twiceEncoded: "affectedObjectType%2520like%2520%2527%2525Equipment%2525%2527"
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-        headers.setAccept(List.of(MediaType.valueOf(accept)));
-        headers.setContentType(MediaType.valueOf(contentType));
+    // 5) Build final URL EXACTLY like the Linux curl that works
+    String url = baseUrl() + alarmsPath + "?alarmFilter=" + twiceEncoded;
 
-        HttpEntity<Void> request = new HttpEntity<>(headers);
-        ResponseEntity<String> response = restTemplate.exchange(
-                url, HttpMethod.GET, request, String.class);
+    log.info("NSP alarms raw filter      : {}", rawFilter);
+    log.info("NSP alarms once-encoded    : {}", onceEncoded);
+    log.info("NSP alarms once (%20)      : {}", onceWithSpacesAsPercent20);
+    log.info("NSP alarms request URL     : {}", url);
 
-        if (!response.getStatusCode().is2xxSuccessful()) {
-            throw new IllegalStateException("NSP alarms request failed: " + response.getStatusCode());
-        }
+    HttpHeaders headers = new HttpHeaders();
+    headers.setBearerAuth(token);
+    headers.setAccept(List.of(MediaType.valueOf(accept)));
+    headers.setContentType(MediaType.valueOf(contentType));
 
-        return response.getBody();
+    HttpEntity<Void> request = new HttpEntity<>(headers);
+    ResponseEntity<String> response = restTemplate.exchange(
+            url, HttpMethod.GET, request, String.class);
+
+    if (!response.getStatusCode().is2xxSuccessful()) {
+        throw new IllegalStateException("NSP alarms request failed: " + response.getStatusCode());
     }
+
+    return response.getBody();
+}
+
 
     public List<String> fetchActiveAlarmEvents() throws Exception {
         String raw = fetchActiveAlarmsRaw();
