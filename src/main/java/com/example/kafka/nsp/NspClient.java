@@ -111,43 +111,41 @@ public class NspClient {
     }
 
     public String fetchActiveAlarmsRaw() throws Exception {
-    String token = getAccessToken();
+        String token = getAccessToken();
 
-    // 1) Raw filter from YAML, e.g. "affectedObjectType like '%Equipment%'"
-    String rawFilter = alarmFilter;
+        // 1) Raw filter from YAML, e.g. "affectedObjectType like '%Equipment%'"
+        String rawFilter = alarmFilter;
 
-    // 2) URL-encode once (URLEncoder turns spaces into '+')
-    String onceEncoded = URLEncoder.encode(rawFilter, StandardCharsets.UTF_8);
-    // e.g. "affectedObjectType+like+%27%25Equipment%25%27"
+        // 2) URL-encode once (URLEncoder turns spaces into '+')
+        String onceEncoded = URLEncoder.encode(rawFilter, StandardCharsets.UTF_8);
+        // e.g. "affectedObjectType+like+%27%25Equipment%25%27"
 
-    // 3) Replace '+' with '%20' so spaces are encoded like in your curl-style URLs
-    String encodedForNsp = onceEncoded.replace("+", "%20");
-    // e.g. "affectedObjectType%20like%20%27%25Equipment%25%27"
+        // 3) Replace '+' with '%20' so spaces are encoded like in your curl-style URLs
+        String encodedForNsp = onceEncoded.replace("+", "%20");
+        // e.g. "affectedObjectType%20like%20%27%25Equipment%25%27"
 
-    // 4) Build final URL with a SINGLE-encoded filter
-    String url = baseUrl() + alarmsPath + "?alarmFilter=" + encodedForNsp;
+        // 4) Build final URL with a SINGLE-encoded filter
+        String url = baseUrl() + alarmsPath + "?alarmFilter=" + encodedForNsp;
 
-    log.info("NSP alarms raw filter   : {}", rawFilter);
-    log.info("NSP alarms encoded      : {}", encodedForNsp);
-    log.info("NSP alarms request URL  : {}", url);
+        log.info("NSP alarms raw filter   : {}", rawFilter);
+        log.info("NSP alarms encoded      : {}", encodedForNsp);
+        log.info("NSP alarms request URL  : {}", url);
 
-    HttpHeaders headers = new HttpHeaders();
-    headers.setBearerAuth(token);
-    headers.setAccept(List.of(MediaType.valueOf(accept)));
-    headers.setContentType(MediaType.valueOf(contentType));
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        headers.setAccept(List.of(MediaType.valueOf(accept)));
+        headers.setContentType(MediaType.valueOf(contentType));
 
-    HttpEntity<Void> request = new HttpEntity<>(headers);
-    ResponseEntity<String> response = restTemplate.exchange(
-            url, HttpMethod.GET, request, String.class);
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+        ResponseEntity<String> response = restTemplate.exchange(
+                url, HttpMethod.GET, request, String.class);
 
-    if (!response.getStatusCode().is2xxSuccessful()) {
+        if (!response.getStatusCode().is2xxSuccessful()) {
         throw new IllegalStateException("NSP alarms request failed: " + response.getStatusCode());
+        }
+
+        return response.getBody();
     }
-
-    return response.getBody();
-}
-
-
 
     public List<String> fetchActiveAlarmEvents() throws Exception {
         String raw = fetchActiveAlarmsRaw();
