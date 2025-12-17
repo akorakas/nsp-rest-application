@@ -78,7 +78,7 @@ public class SyncMarkerFactory {
       ctx.put("probableCause", "");
       ctx.put("alarmType", "");
       ctx.put("impact", 0);
-      ctx.put("serviceAffecting", (Object) null);
+      ctx.put("serviceAffecting", "");
       ctx.put("objectFullName", "");
 
       // alarmIdentifier για SYNC markers – βάζω το type για να ξεχωρίζει
