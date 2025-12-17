@@ -116,25 +116,20 @@ public class NspClient {
     // 1) Raw filter from YAML, e.g. "affectedObjectType like '%Equipment%'"
     String rawFilter = alarmFilter;
 
-    // 2) First encode with URLEncoder (spaces -> '+', etc.)
+    // 2) URL-encode once (URLEncoder turns spaces into '+')
     String onceEncoded = URLEncoder.encode(rawFilter, StandardCharsets.UTF_8);
-    // onceEncoded: "affectedObjectType+like+%27%25Equipment%25%27"
+    // e.g. "affectedObjectType+like+%27%25Equipment%25%27"
 
-    // 3) Replace '+' with '%20' so that spaces are encoded as %20, not '+'
-    String onceWithSpacesAsPercent20 = onceEncoded.replace("+", "%20");
-    // onceWithSpacesAsPercent20: "affectedObjectType%20like%20%27%25Equipment%25%27"
+    // 3) Replace '+' with '%20' so spaces are encoded like in your curl-style URLs
+    String encodedForNsp = onceEncoded.replace("+", "%20");
+    // e.g. "affectedObjectType%20like%20%27%25Equipment%25%27"
 
-    // 4) Encode AGAIN to match the working curl (double-encoded)
-    String twiceEncoded = URLEncoder.encode(onceWithSpacesAsPercent20, StandardCharsets.UTF_8);
-    // twiceEncoded: "affectedObjectType%2520like%2520%2527%2525Equipment%2525%2527"
+    // 4) Build final URL with a SINGLE-encoded filter
+    String url = baseUrl() + alarmsPath + "?alarmFilter=" + encodedForNsp;
 
-    // 5) Build final URL EXACTLY like the Linux curl that works
-    String url = baseUrl() + alarmsPath + "?alarmFilter=" + twiceEncoded;
-
-    log.info("NSP alarms raw filter      : {}", rawFilter);
-    log.info("NSP alarms once-encoded    : {}", onceEncoded);
-    log.info("NSP alarms once (%20)      : {}", onceWithSpacesAsPercent20);
-    log.info("NSP alarms request URL     : {}", url);
+    log.info("NSP alarms raw filter   : {}", rawFilter);
+    log.info("NSP alarms encoded      : {}", encodedForNsp);
+    log.info("NSP alarms request URL  : {}", url);
 
     HttpHeaders headers = new HttpHeaders();
     headers.setBearerAuth(token);
@@ -151,6 +146,7 @@ public class NspClient {
 
     return response.getBody();
 }
+
 
 
     public List<String> fetchActiveAlarmEvents() throws Exception {
